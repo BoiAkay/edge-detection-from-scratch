@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Canny Edge Detector — Visual Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES — Light & Dark
+═══════════════════════════════════════════════ */
+:root {
+  --accent:       #00e5b0;
+  --accent-dim:   #00b889;
+  --accent-glow:  rgba(0,229,176,0.18);
+  --danger:       #ff5e5e;
+  --warn:         #ffa94d;
+
+  /* Dark theme (default) */
+  --bg:           #0b0d0f;
+  --bg-card:      #11151a;
+  --bg-ctrl:      #161b22;
+  --border:       rgba(255,255,255,0.07);
+  --border-acc:   rgba(0,229,176,0.35);
+  --text:         #dce6f0;
+  --text-dim:     #6a7f96;
+  --text-label:   #9bb5cc;
+  --canvas-bg:    #080a0c;
+  --scanline:     rgba(0,0,0,0.25);
+  --shadow:       0 4px 32px rgba(0,0,0,0.55);
+  --header-bg:    rgba(11,13,15,0.92);
+  --logo-color:   #00e5b0;
+}
+
+[data-theme="light"] {
+  --bg:           #f2ede6;
+  --bg-card:      #faf7f2;
+  --bg-ctrl:      #ede8df;
+  --border:       rgba(0,0,0,0.09);
+  --border-acc:   rgba(0,162,120,0.4);
+  --text:         #1a2228;
+  --text-dim:     #7a8b97;
+  --text-label:   #3d5568;
+  --canvas-bg:    #0b0d0e;
+  --scanline:     rgba(0,0,0,0.18);
+  --shadow:       0 4px 24px rgba(0,0,0,0.13);
+  --header-bg:    rgba(242,237,230,0.94);
+  --accent:       #009e7a;
+  --accent-dim:   #007a5e;
+  --accent-glow:  rgba(0,158,122,0.14);
+}
+
+/* ═══════════════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'IBM Plex Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+
+/* Subtle dot-grid background */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════ */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.logo-mark {
+  width: 32px; height: 32px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  display: grid; place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.logo-mark::before {
+  content: '';
+  position: absolute; inset: 3px;
+  background: linear-gradient(135deg, var(--accent) 0%, transparent 60%);
+  opacity: 0.4;
+}
+.logo-mark svg { width: 16px; height: 16px; stroke: var(--accent); stroke-width: 2; fill: none; z-index: 1; }
+
+.logo-text {
+  font-family: 'Fraunces', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.logo-text span { color: var(--accent); }
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+
+.badge {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Dark mode toggle */
+.theme-toggle {
+  cursor: pointer;
+  width: 52px; height: 28px;
+  background: var(--bg-ctrl);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  position: relative;
+  transition: border-color 0.2s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--accent-dim); }
+.theme-toggle .knob {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+  display: grid; place-items: center;
+  font-size: 10px;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+[data-theme="light"] .theme-toggle .knob { transform: translateX(24px); }
+
+/* ═══════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════ */
+.app {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  min-height: calc(100vh - 60px);
+  gap: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════ */
+.sidebar {
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 1.25rem;
+  display: flex; flex-direction: column; gap: 1.5rem;
+  overflow-y: auto;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+}
+
+.section-title {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.75rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Image source controls ── */
+.img-source { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.upload-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  padding: 1.1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.upload-zone:hover {
+  border-color: var(--accent-dim);
+  background: var(--accent-glow);
+  color: var(--text-label);
+}
+.upload-zone .icon { font-size: 1.5rem; display: block; margin-bottom: 4px; }
+#fileInput { display: none; }
+
+.or-divider {
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  position: relative;
+}
+.or-divider::before, .or-divider::after {
+  content: '';
+  position: absolute; top: 50%;
+  width: 38%; height: 1px;
+  background: var(--border);
+}
+.or-divider::before { left: 0; }
+.or-divider::after { right: 0; }
+
+.url-row { display: flex; gap: 6px; }
+input[type="text"] {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.68rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input[type="text"]:focus { border-color: var(--accent-dim); }
+input[type="text"]::placeholder { color: var(--text-dim); }
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-label);
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #000; }
+
+/* Sample thumbnails */
+.samples-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
+}
+.sample-thumb {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  transition: border-color 0.2s, transform 0.15s;
+  background: var(--canvas-bg);
+  position: relative;
+}
+.sample-thumb:hover { border-color: var(--accent); transform: scale(1.04); }
+.sample-thumb.active { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+.sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(100%); }
+
+/* ── Filter selection ── */
+.filter-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.filter-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.55rem 0.4rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.filter-btn:hover { border-color: var(--accent-dim); }
+.filter-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+.filter-btn .f-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: inherit;
+}
+.filter-btn .f-dim {
+  display: block;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ── Parameter sliders ── */
+.param-group { display: flex; flex-direction: column; gap: 0.9rem; }
+.param-row { display: flex; flex-direction: column; gap: 0.25rem; }
+.param-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.param-label {
+  font-size: 0.65rem;
+  color: var(--text-label);
+  letter-spacing: 0.05em;
+}
+.param-val {
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 36px;
+  text-align: right;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 6px var(--accent-glow);
+  transition: transform 0.15s;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+
+/* Run button */
+.run-btn {
+  width: 100%;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  font: 600 0.8rem 'IBM Plex Mono', monospace;
+  letter-spacing: 0.06em;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+.run-btn:hover { background: var(--accent-dim); transform: translateY(-1px); box-shadow: 0 4px 20px var(--accent-glow); }
+.run-btn:active { transform: none; }
+.run-btn .spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(0,0,0,0.3);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+.run-btn.running .spinner { display: block; }
+.run-btn.running .btn-label { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════
+   MAIN CONTENT
+═══════════════════════════════════════════════ */
+.main {
+  padding: 2rem;
+  display: flex; flex-direction: column; gap: 2rem;
+  min-width: 0;
+}
+
+/* Hero / empty state */
+.hero {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; gap: 1.2rem;
+  min-height: 400px;
+  border: 1.5px dashed var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+}
+.hero-title {
+  font-family: 'Fraunces', serif;
+  font-size: 2.4rem;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text);
+}
+.hero-title em { font-style: italic; color: var(--accent); }
+.hero-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  max-width: 380px;
+  line-height: 1.8;
+}
+.hero-steps {
+  display: flex; gap: 0.5rem;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hero-step {
+  display: flex; align-items: center; gap: 5px;
+}
+.hero-step .num {
+  width: 18px; height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 0.6rem;
+  color: var(--accent);
+}
+.hero-step .arrow { color: var(--border); }
+
+/* Results section */
+#results { display: none; flex-direction: column; gap: 1.5rem; }
+#results.visible { display: flex; animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } }
+
+/* Stats bar */
+.stats-bar {
+  display: flex; align-items: center; gap: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1.25rem;
+  flex-wrap: wrap;
+}
+.stat-item { display: flex; flex-direction: column; gap: 2px; }
+.stat-label { font-size: 0.58rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.stat-val { font-size: 0.88rem; font-weight: 600; color: var(--accent); }
+.stat-divider { width: 1px; height: 30px; background: var(--border); }
+
+/* Stage grid */
+.stages-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.stage-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: flex; flex-direction: column;
+}
+.stage-card:hover { border-color: var(--border-acc); box-shadow: 0 0 24px var(--accent-glow); }
+
+.stage-header {
+  padding: 0.55rem 0.85rem;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.stage-num {
+  font-size: 0.58rem;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+.stage-name {
+  font-size: 0.68rem;
+  color: var(--text-label);
+  font-weight: 500;
+}
+.stage-cmap {
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Canvas wrapper — CRT aesthetic */
+.canvas-wrap {
+  position: relative;
+  background: var(--canvas-bg);
+  flex: 1;
+  min-height: 180px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+/* Scanline overlay */
+.canvas-wrap::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    var(--scanline) 0px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.5;
+}
+/* Vignette */
+.canvas-wrap::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.stage-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  position: relative; z-index: 1;
+}
+
+/* Placeholder canvas state */
+.canvas-placeholder {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 2rem;
+  line-height: 1.8;
+}
+
+/* ── Filter kernel display ── */
+.kernel-display {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+.kernel-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.kernel-panel { flex: 1; min-width: 120px; }
+.kernel-title { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.5rem; }
+.kernel-grid {
+  display: inline-grid;
+  gap: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+}
+.kernel-cell {
+  width: 36px; height: 28px;
+  display: grid; place-items: center;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  background: var(--bg-ctrl);
+  font-weight: 500;
+}
+.kernel-cell.pos { color: var(--accent); background: rgba(0,229,176,0.07); }
+.kernel-cell.neg { color: var(--danger); background: rgba(255,94,94,0.07); }
+.kernel-cell.zero { color: var(--text-dim); }
+
+/* ── Progress bar ── */
+.progress-wrap {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--border);
+  z-index: 200;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+  width: 0%;
+  transition: width 0.1s;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.72rem;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  z-index: 300;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.25s ease;
+  max-width: 280px;
+}
+.toast.show { transform: none; opacity: 1; }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+.toast.success { border-color: var(--accent); }
+
+/* ── Download button ── */
+.download-btn {
+  align-self: flex-end;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-label);
+  border-radius: 7px;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.15s;
+}
+.download-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ═══════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .stages-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 580px) {
+  .stages-grid { grid-template-columns: 1fr; }
+  header { padding: 0 1rem; }
+  .main { padding: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- PROGRESS BAR -->
+<div class="progress-wrap" id="progressWrap">
+  <div class="progress-bar" id="progressBar"></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16"><path d="M1 8h14M8 1v14M3 3l10 10M13 3L3 13"/></svg>
+    </div>
+    <span class="logo-text"><span>Canny</span> Visual Lab</span>
+  </div>
+  <div class="header-right">
+    <span class="badge">Pure JS · No OpenCV</span>
+    <div class="theme-toggle" id="themeToggle" role="button" aria-label="Toggle theme" title="Toggle dark/light mode">
+      <div class="knob">
+        <span id="themeIcon">🌙</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- APP LAYOUT -->
+<div class="app">
+
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="sidebar">
+
+    <!-- Image source -->
+    <div>
+      <div class="section-title">Image Source</div>
+      <div class="img-source">
+        <label class="upload-zone" for="fileInput">
+          <span class="icon">⬆</span>
+          Drop image here<br>or click to upload
+        </label>
+        <input type="file" id="fileInput" accept="image/*" />
+        <div class="or-divider">or</div>
+        <div class="url-row">
+          <input type="text" id="urlInput" placeholder="Paste image URL…" />
+          <button class="btn" onclick="loadFromURL()">Go</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sample images -->
+    <div>
+      <div class="section-title">Samples</div>
+      <div class="samples-grid" id="samplesGrid"></div>
+    </div>
+
+    <!-- Filter selection -->
+    <div>
+      <div class="section-title">Gradient Filter</div>
+      <div class="filter-grid" id="filterGrid"></div>
+    </div>
+
+    <!-- Parameters -->
+    <div>
+      <div class="section-title">Parameters</div>
+      <div class="param-group">
+        <div class="param-row">
+          <div class="param-header">
+            <span class="param-label">Gaussian Sigma σ</span>
+            <span class="param-val" id="sigmaVal">1.4</span>
+          </div>
+          <input type="range" id="sigma" min="0.5" max="4.0" step="0.1" value="1.4"
+            oninput="document.getElementById('sigmaVal').textContent=parseFloat(this.value).toFixed(1)">
+        </div>
+        <div class="param-row">
+          <div class="param-header">
+            <span class="param-label">Kernel Size</span>
+            <span class="param-val" id="kernelVal">5×5</span>
+          </div>
+          <input type="range" id="kernelSize" min="3" max="11" step="2" value="5"
+            oninput="document.getElementById('kernelVal').textContent=this.value+'×'+this.value">
+        </div>
+        <div class="param-row">
+          <div class="param-header">
+            <span class="param-label">High Threshold %</span>
+            <span class="param-val" id="highVal">15%</span>
+          </div>
+          <input type="range" id="highRatio" min="5" max="40" step="1" value="15"
+            oninput="document.getElementById('highVal').textContent=this.value+'%'">
+        </div>
+        <div class="param-row">
+          <div class="param-header">
+            <span class="param-label">Low / High ratio</span>
+            <span class="param-val" id="lowVal">5%</span>
+          </div>
+          <input type="range" id="lowRatio" min="1" max="50" step="1" value="5"
+            oninput="document.getElementById('lowVal').textContent=this.value+'%'">
+        </div>
+      </div>
+    </div>
+
+    <!-- Run button -->
+    <button class="run-btn" id="runBtn" onclick="runCanny()">
+      <span class="btn-label">▶ RUN DETECTION</span>
+      <div class="spinner"></div>
+    </button>
+
+  </aside>
+
+  <!-- ─── MAIN ─── -->
+  <main class="main">
+
+    <!-- Hero (empty state) -->
+    <div class="hero" id="hero">
+      <div class="hero-title">See the<br><em>edges</em> of everything</div>
+      <div class="hero-sub">
+        Upload any image or pick a sample, choose your gradient filter,
+        tune the parameters, and watch every stage of the Canny pipeline unfold — live in your browser.
+      </div>
+      <div class="hero-steps">
+        <div class="hero-step"><div class="num">1</div>Pick image</div>
+        <div class="hero-step"><div class="arrow">→</div><div class="num">2</div>Choose filter</div>
+        <div class="hero-step"><div class="arrow">→</div><div class="num">3</div>Tune params</div>
+        <div class="hero-step"><div class="arrow">→</div><div class="num">4</div>Run</div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-label">Image Size</div>
+          <div class="stat-val" id="statSize">—</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-label">Filter</div>
+          <div class="stat-val" id="statFilter">—</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-label">Edge Pixels</div>
+          <div class="stat-val" id="statEdgePx">—</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-label">Edge %</div>
+          <div class="stat-val" id="statEdgePct">—</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-label">σ / Kernel</div>
+          <div class="stat-val" id="statGauss">—</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-label">Run Time</div>
+          <div class="stat-val" id="statTime">—</div>
+        </div>
+        <div style="flex:1"></div>
+        <button class="download-btn" onclick="downloadComposite()">⬇ Download composite</button>
+      </div>
+
+      <!-- Kernel display -->
+      <div class="kernel-display" id="kernelDisplay"></div>
+
+      <!-- 6-stage grid -->
+      <div class="stages-grid" id="stagesGrid"></div>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   THEME MANAGEMENT
+═══════════════════════════════════════════════════════════ */
+(function() {
+  const saved = localStorage.getItem('theme');
+  const sys   = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  const theme = saved || sys;
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeIcon').textContent = theme === 'light' ? '☀' : '🌙';
+})();
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const curr = document.documentElement.getAttribute('data-theme');
+  const next = curr === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('themeIcon').textContent = next === 'light' ? '☀' : '🌙';
+  localStorage.setItem('theme', next);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER DEFINITIONS
+═══════════════════════════════════════════════════════════ */
+const FILTERS = {
+  sobel: {
+    label: 'Sobel', dim: '3×3 weighted', default: true,
+    Kx: [[-1,0,1],[-2,0,2],[-1,0,1]],
+    Ky: [[-1,-2,-1],[0,0,0],[1,2,1]],
+    desc: 'Weighted 3×3, best general-purpose gradient estimate.'
+  },
+  prewitt: {
+    label: 'Prewitt', dim: '3×3 uniform',
+    Kx: [[-1,0,1],[-1,0,1],[-1,0,1]],
+    Ky: [[-1,-1,-1],[0,0,0],[1,1,1]],
+    desc: 'Uniform 3×3. Slightly noisier than Sobel on textured regions.'
+  },
+  scharr: {
+    label: 'Scharr', dim: '3×3 hi-acc',
+    Kx: [[-3,0,3],[-10,0,10],[-3,0,3]],
+    Ky: [[-3,-10,-3],[0,0,0],[3,10,3]],
+    desc: 'Rotation-invariant high-accuracy kernel. Best for diagonal edges.'
+  },
+  roberts: {
+    label: 'Roberts', dim: '2×2 diag',
+    Kx: [[1,0],[0,-1]],
+    Ky: [[0,1],[-1,0]],
+    desc: 'Compact 2×2 cross-gradient. Sharp but sensitive to noise.'
+  }
+};
+
+let activeFilter = 'sobel';
+let loadedImageData = null;
+
+/* Build filter buttons */
+const filterGrid = document.getElementById('filterGrid');
+Object.entries(FILTERS).forEach(([key, f]) => {
+  const btn = document.createElement('div');
+  btn.className = 'filter-btn' + (key === 'sobel' ? ' active' : '');
+  btn.dataset.filter = key;
+  btn.innerHTML = `<span class="f-name">${f.label}</span><span class="f-dim">${f.dim}</span>`;
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = key;
+  });
+  filterGrid.appendChild(btn);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   SAMPLE IMAGES  (CC-licensed via GitHub raw)
+═══════════════════════════════════════════════════════════ */
+const SAMPLES = [
+  { name:'Lena',     url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/lena.jpg' },
+  { name:'Building', url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/building.jpg' },
+  { name:'Baboon',   url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/baboon.jpg' },
+  { name:'Fruits',   url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/fruits.jpg' },
+  { name:'Board',    url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/board.jpg' },
+  { name:'Chess',    url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/img_with_chessboard.png' },
+];
+
+const samplesGrid = document.getElementById('samplesGrid');
+SAMPLES.forEach((s, i) => {
+  const div = document.createElement('div');
+  div.className = 'sample-thumb';
+  div.title = s.name;
+  div.dataset.url = s.url;
+  const img = document.createElement('img');
+  img.src = s.url;
+  img.alt = s.name;
+  img.onerror = () => { div.style.display = 'none'; };
+  div.appendChild(img);
+  div.addEventListener('click', () => {
+    document.querySelectorAll('.sample-thumb').forEach(t => t.classList.remove('active'));
+    div.classList.add('active');
+    loadImageFromURL(s.url);
+  });
+  samplesGrid.appendChild(div);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   IMAGE LOADING
+═══════════════════════════════════════════════════════════ */
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => loadImageFromDataURL(ev.target.result);
+  reader.readAsDataURL(file);
+  document.querySelectorAll('.sample-thumb').forEach(t => t.classList.remove('active'));
+});
+
+function loadFromURL() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return showToast('Please enter an image URL', 'error');
+  loadImageFromURL(url);
+}
+
+function loadImageFromURL(url) {
+  showToast('Loading image…');
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const MAX = 800;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      const s = MAX / Math.max(w, h);
+      w = Math.round(w * s); h = Math.round(h * s);
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    loadedImageData = ctx.getImageData(0, 0, w, h);
+    showToast(`Image loaded: ${w}×${h}`, 'success');
+    document.getElementById('hero').style.opacity = '0.4';
+  };
+  img.onerror = () => showToast('Failed to load image. Try a direct image URL.', 'error');
+  img.src = url;
+}
+
+function loadImageFromDataURL(dataURL) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const MAX = 800;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      const s = MAX / Math.max(w, h);
+      w = Math.round(w * s); h = Math.round(h * s);
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    loadedImageData = ctx.getImageData(0, 0, w, h);
+    showToast(`Image loaded: ${w}×${h}`, 'success');
+    document.getElementById('hero').style.opacity = '0.4';
+  };
+  img.src = dataURL;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CANNY PIPELINE — Pure JavaScript (mirrors Python exactly)
+═══════════════════════════════════════════════════════════ */
+
+/** Convert RGBA ImageData → Float64 grayscale (0-255) */
+function rgbaToGray(imgData) {
+  const { data, width, height } = imgData;
+  const gray = new Float64Array(width * height);
+  for (let i = 0; i < gray.length; i++) {
+    const j = i * 4;
+    gray[i] = 0.2989 * data[j] + 0.5870 * data[j+1] + 0.1140 * data[j+2];
+  }
+  return gray;
+}
+
+/** Build 1-D Gaussian kernel (for separable convolution) */
+function gaussianKernel1D(size, sigma) {
+  const k   = Math.floor(size / 2);
+  const ker = new Float64Array(size);
+  let sum = 0;
+  for (let i = 0; i < size; i++) {
+    const x = i - k;
+    ker[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+    sum += ker[i];
+  }
+  for (let i = 0; i < size; i++) ker[i] /= sum;
+  return ker;
+}
+
+/** Separable 2-D Gaussian blur (much faster than full 2-D conv) */
+function gaussianBlur(gray, W, H, size, sigma) {
+  const k1d = gaussianKernel1D(size, sigma);
+  const k   = Math.floor(size / 2);
+  const tmp = new Float64Array(W * H);
+  const out = new Float64Array(W * H);
+
+  // Horizontal pass
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let v = 0;
+      for (let d = -k; d <= k; d++) {
+        const xi = Math.max(0, Math.min(W-1, x+d));
+        v += k1d[d+k] * gray[y*W + xi];
+      }
+      tmp[y*W + x] = v;
+    }
+  }
+  // Vertical pass
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let v = 0;
+      for (let d = -k; d <= k; d++) {
+        const yi = Math.max(0, Math.min(H-1, y+d));
+        v += k1d[d+k] * tmp[yi*W + x];
+      }
+      out[y*W + x] = v;
+    }
+  }
+  return out;
+}
+
+/** 2-D convolution with a small kernel (for gradient filters) */
+function convolve2D(gray, W, H, kernel) {
+  const kH   = kernel.length;
+  const kW   = kernel[0].length;
+  const pkH  = Math.floor(kH / 2);
+  const pkW  = Math.floor(kW / 2);
+  const out  = new Float64Array(W * H);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let v = 0;
+      for (let ki = 0; ki < kH; ki++) {
+        for (let kj = 0; kj < kW; kj++) {
+          const yi = Math.max(0, Math.min(H-1, y + ki - pkH));
+          const xi = Math.max(0, Math.min(W-1, x + kj - pkW));
+          v += kernel[ki][kj] * gray[yi*W + xi];
+        }
+      }
+      out[y*W + x] = v;
+    }
+  }
+  return out;
+}
+
+/** Compute gradient magnitude (0-255 normalised) and direction (0-180°) */
+function computeGradients(blurred, W, H, filterName) {
+  const f    = FILTERS[filterName];
+  const Gx   = convolve2D(blurred, W, H, f.Kx);
+  const Gy   = convolve2D(blurred, W, H, f.Ky);
+  const mag  = new Float64Array(W * H);
+  const ang  = new Float64Array(W * H);
+  let maxMag = 0;
+
+  for (let i = 0; i < mag.length; i++) {
+    const m = Math.sqrt(Gx[i]*Gx[i] + Gy[i]*Gy[i]);
+    mag[i]  = m;
+    ang[i]  = ((Math.atan2(Gy[i], Gx[i]) * 180 / Math.PI) % 180 + 180) % 180;
+    if (m > maxMag) maxMag = m;
+  }
+  if (maxMag > 0) {
+    for (let i = 0; i < mag.length; i++) mag[i] = mag[i] / maxMag * 255;
+  }
+  return { mag, ang };
+}
+
+/** Non-maximum suppression (vectorised, 4 quantised directions) */
+function nonMaxSuppression(mag, ang, W, H) {
+  const out = new Float64Array(W * H);
+
+  for (let y = 1; y < H-1; y++) {
+    for (let x = 1; x < W-1; x++) {
+      const i = y*W + x;
+      const a = ang[i];
+      const m = mag[i];
+      let p, q;
+
+      if      (a < 22.5  || a >= 157.5) { p = mag[i+1];     q = mag[i-1];     }  // 0°
+      else if (a < 67.5)                 { p = mag[(y-1)*W+(x+1)]; q = mag[(y+1)*W+(x-1)]; } // 45°
+      else if (a < 112.5)                { p = mag[(y-1)*W+x];     q = mag[(y+1)*W+x];     } // 90°
+      else                               { p = mag[(y+1)*W+(x+1)]; q = mag[(y-1)*W+(x-1)]; } // 135°
+
+      out[i] = (m >= p && m >= q) ? m : 0;
+    }
+  }
+  return out;
+}
+
+const STRONG = 255, WEAK = 75;
+
+/** Double threshold: classify into STRONG / WEAK / 0 */
+function doubleThreshold(nms, W, H, highRatio, lowRatio) {
+  let maxNms = 0;
+  for (let i = 0; i < nms.length; i++) if (nms[i] > maxNms) maxNms = nms[i];
+
+  const highT = maxNms * highRatio;
+  const lowT  = highT * lowRatio;
+
+  const out = new Float64Array(W * H);
+  for (let i = 0; i < nms.length; i++) {
+    if      (nms[i] >= highT) out[i] = STRONG;
+    else if (nms[i] >= lowT)  out[i] = WEAK;
+  }
+  return { thresholded: out, highT, lowT };
+}
+
+/** Hysteresis edge tracking — BFS from all STRONG pixels */
+function hysteresis(thresholded, W, H) {
+  const out    = new Uint8Array(W * H);
+  const queue  = [];
+
+  // Seed: all STRONG pixels
+  for (let i = 0; i < thresholded.length; i++) {
+    if (thresholded[i] === STRONG) { out[i] = STRONG; queue.push(i); }
+  }
+
+  // BFS
+  const dx = [-1,0,1,-1,1,-1,0,1];
+  const dy = [-1,-1,-1,0,0,1,1,1];
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const idx = queue[qi++];
+    const y   = Math.floor(idx / W);
+    const x   = idx % W;
+    for (let d = 0; d < 8; d++) {
+      const ny = y + dy[d], nx = x + dx[d];
+      if (ny < 0 || ny >= H || nx < 0 || nx >= W) continue;
+      const ni = ny*W + nx;
+      if (thresholded[ni] === WEAK && out[ni] === 0) {
+        out[ni] = STRONG;
+        queue.push(ni);
+      }
+    }
+  }
+  return out;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDERING HELPERS
+═══════════════════════════════════════════════════════════ */
+
+/** Render a Float64/Uint8 grayscale array onto a canvas element */
+function renderGray(canvas, data, W, H, colormap) {
+  canvas.width = W; canvas.height = H;
+  const ctx  = canvas.getContext('2d');
+  const id   = ctx.createImageData(W, H);
+  const px   = id.data;
+
+  for (let i = 0; i < data.length; i++) {
+    const v = Math.max(0, Math.min(255, data[i]));
+    const j = i * 4;
+    if (colormap === 'hot') {
+      // Map 0-255 → black→red→yellow→white
+      px[j]   = Math.min(255, v * 3);
+      px[j+1] = Math.min(255, Math.max(0, v * 3 - 255));
+      px[j+2] = Math.min(255, Math.max(0, v * 3 - 510));
+    } else if (colormap === 'inferno') {
+      const t = v / 255;
+      px[j]   = Math.round(255 * (0.001462 + t*(0.9999 - t*0.11)));
+      px[j+1] = Math.round(255 * t * t * 0.85);
+      px[j+2] = Math.round(255 * (0.013866 + t*(0.22 - t*0.6)));
+    } else {
+      px[j] = px[j+1] = px[j+2] = v;
+    }
+    px[j+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUILD STAGE PANELS
+═══════════════════════════════════════════════════════════ */
+const STAGE_META = [
+  { key:'original',    num:'01', name:'Original (Gray)',        cmap:'gray'    },
+  { key:'blurred',     num:'02', name:'Gaussian Blur',          cmap:'gray'    },
+  { key:'gradient',    num:'03', name:'Gradient Magnitude',     cmap:'hot'     },
+  { key:'nms',         num:'04', name:'Non-Max Suppression',    cmap:'gray'    },
+  { key:'thresholded', num:'05', name:'Double Threshold',       cmap:'gray'    },
+  { key:'edges',       num:'06', name:'Canny Edges',            cmap:'inferno' },
+];
+
+function buildStagesGrid() {
+  const grid = document.getElementById('stagesGrid');
+  grid.innerHTML = '';
+  STAGE_META.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'stage-card';
+    card.innerHTML = `
+      <div class="stage-header">
+        <span class="stage-num">STAGE ${s.num}</span>
+        <span class="stage-name">${s.name}</span>
+        <span class="stage-cmap">${s.cmap}</span>
+      </div>
+      <div class="canvas-wrap">
+        <canvas class="stage-canvas" id="canvas-${s.key}"></canvas>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+buildStagesGrid();
+
+/* ═══════════════════════════════════════════════════════════
+   KERNEL DISPLAY
+═══════════════════════════════════════════════════════════ */
+function renderKernelDisplay(filterName) {
+  const f   = FILTERS[filterName];
+  const div = document.getElementById('kernelDisplay');
+
+  const fmt = (v) => {
+    const cls = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+    return `<div class="kernel-cell ${cls}">${v}</div>`;
+  };
+
+  const buildGrid = (K) => {
+    const cols = K[0].length;
+    return `<div class="kernel-grid" style="grid-template-columns:repeat(${cols},36px)">
+      ${K.flat().map(fmt).join('')}
+    </div>`;
+  };
+
+  div.innerHTML = `
+    <div style="margin-bottom:0.6rem;font-size:0.62rem;color:var(--text-dim)">
+      <strong style="color:var(--accent)">${f.label}</strong> — ${f.desc}
+    </div>
+    <div class="kernel-row">
+      <div class="kernel-panel">
+        <div class="kernel-title">K<sub>x</sub> (horizontal)</div>
+        ${buildGrid(f.Kx)}
+      </div>
+      <div class="kernel-panel">
+        <div class="kernel-title">K<sub>y</sub> (vertical)</div>
+        ${buildGrid(f.Ky)}
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROGRESS HELPERS
+═══════════════════════════════════════════════════════════ */
+function setProgress(pct) {
+  const wrap = document.getElementById('progressWrap');
+  const bar  = document.getElementById('progressBar');
+  wrap.style.display = 'block';
+  bar.style.width = pct + '%';
+  if (pct >= 100) setTimeout(() => { wrap.style.display = 'none'; bar.style.width = '0%'; }, 600);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN RUN FUNCTION
+═══════════════════════════════════════════════════════════ */
+function runCanny() {
+  if (!loadedImageData) return showToast('Load an image first!', 'error');
+
+  const btn = document.getElementById('runBtn');
+  btn.classList.add('running');
+  setProgress(5);
+
+  // Yield to browser to render the spinner
+  setTimeout(() => {
+    try {
+      const t0 = performance.now();
+      const { width: W, height: H } = loadedImageData;
+
+      const sigma      = parseFloat(document.getElementById('sigma').value);
+      const kernelSize = parseInt(document.getElementById('kernelSize').value);
+      const highRatio  = parseInt(document.getElementById('highRatio').value) / 100;
+      const lowRatio   = parseInt(document.getElementById('lowRatio').value) / 100;
+
+      // ── Stage 1: Grayscale
+      const gray = rgbaToGray(loadedImageData);
+      setProgress(15);
+
+      // ── Stage 2: Gaussian blur
+      const blurred = gaussianBlur(gray, W, H, kernelSize, sigma);
+      setProgress(30);
+
+      // ── Stage 3: Gradients
+      const { mag, ang } = computeGradients(blurred, W, H, activeFilter);
+      setProgress(50);
+
+      // ── Stage 4: NMS
+      const nms = nonMaxSuppression(mag, ang, W, H);
+      setProgress(65);
+
+      // ── Stage 5: Double threshold
+      const { thresholded, highT, lowT } = doubleThreshold(nms, W, H, highRatio, lowRatio);
+      setProgress(80);
+
+      // ── Stage 6: Hysteresis
+      const edges = hysteresis(thresholded, W, H);
+      setProgress(92);
+
+      const t1 = performance.now();
+
+      // ── Render stages
+      renderGray(document.getElementById('canvas-original'),    gray,        W, H, 'gray');
+      renderGray(document.getElementById('canvas-blurred'),     blurred,     W, H, 'gray');
+      renderGray(document.getElementById('canvas-gradient'),    mag,         W, H, 'hot');
+      renderGray(document.getElementById('canvas-nms'),         nms,         W, H, 'gray');
+      renderGray(document.getElementById('canvas-thresholded'), thresholded, W, H, 'gray');
+      renderGray(document.getElementById('canvas-edges'),       edges,       W, H, 'inferno');
+
+      // ── Kernel display
+      renderKernelDisplay(activeFilter);
+
+      // ── Stats
+      const edgePx  = edges.reduce((s, v) => s + (v === STRONG ? 1 : 0), 0);
+      const total   = W * H;
+      const pct     = (edgePx / total * 100).toFixed(2);
+      const elapsed = (t1 - t0).toFixed(0);
+
+      document.getElementById('statSize').textContent    = `${W}×${H}`;
+      document.getElementById('statFilter').textContent  = FILTERS[activeFilter].label;
+      document.getElementById('statEdgePx').textContent  = edgePx.toLocaleString();
+      document.getElementById('statEdgePct').textContent = `${pct}%`;
+      document.getElementById('statGauss').textContent   = `σ${sigma} / ${kernelSize}px`;
+      document.getElementById('statTime').textContent    = `${elapsed} ms`;
+
+      // ── Show results
+      document.getElementById('hero').style.display = 'none';
+      const results = document.getElementById('results');
+      results.classList.add('visible');
+
+      setProgress(100);
+      showToast(`Done — ${edgePx.toLocaleString()} edge pixels (${pct}%) in ${elapsed}ms`, 'success');
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+      console.error(err);
+    } finally {
+      btn.classList.remove('running');
+    }
+  }, 20);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DOWNLOAD COMPOSITE (all 6 stages tiled)
+═══════════════════════════════════════════════════════════ */
+function downloadComposite() {
+  const canvases = STAGE_META.map(s => document.getElementById('canvas-' + s.key));
+  if (!canvases[0] || canvases[0].width === 0) return showToast('Run detection first!', 'error');
+
+  const cols  = 3, rows = 2;
+  const cW    = canvases[0].width;
+  const cH    = canvases[0].height;
+  const pad   = 6;
+  const label = 24;
+  const total_W = cols * (cW + pad) + pad;
+  const total_H = rows * (cH + pad + label) + pad;
+
+  const out = document.createElement('canvas');
+  out.width = total_W; out.height = total_H;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#0b0d0f';
+  ctx.fillRect(0, 0, total_W, total_H);
+
+  STAGE_META.forEach((s, idx) => {
+    const col = idx % cols, row = Math.floor(idx / cols);
+    const ox  = pad + col * (cW + pad);
+    const oy  = pad + row * (cH + pad + label);
+
+    ctx.fillStyle = '#11151a';
+    ctx.fillRect(ox, oy, cW, cH + label);
+
+    ctx.drawImage(canvases[idx], ox, oy, cW, cH);
+
+    ctx.fillStyle = '#9bb5cc';
+    ctx.font = '11px IBM Plex Mono, monospace';
+    ctx.fillText(`${s.num} ${s.name}`, ox + 6, oy + cH + 16);
+  });
+
+  const a = document.createElement('a');
+  a.download = `canny_${activeFilter}_composite.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+  showToast('Composite downloaded!', 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════════ */
+let _toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+/* ── Auto-load first sample on start ── */
+window.addEventListener('load', () => {
+  const firstSample = document.querySelector('.sample-thumb');
+  if (firstSample) {
+    firstSample.classList.add('active');
+    loadImageFromURL(firstSample.dataset.url);
+  }
+});
+</script>
+</body>
+</html>

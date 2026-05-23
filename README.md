@@ -16,7 +16,7 @@ A complete, ground-up implementation of the **Canny edge detection algorithm** i
 
 Every stage of the pipeline is implemented manually: **Gaussian blur → gradient computation → non-maximum suppression → double threshold → hysteresis edge tracking.**
 
-**[→ Try the Live Demo](https://YOUR_USERNAME.github.io/canny-visual-lab/)**
+**[→ Try the Live Demo](https://boiakay.github.io/edge-detection-from-scratch/)**
 
 </div>
 

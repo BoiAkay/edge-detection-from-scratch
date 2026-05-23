@@ -131,6 +131,46 @@ header {
   text-transform: uppercase;
 }
 
+/* ── Visit counter chip ── */
+.visit-counter {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg-ctrl);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  transition: border-color 0.2s;
+}
+.visit-counter:hover { border-color: var(--accent-dim); }
+.visit-counter .vc-icon {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.visit-counter .vc-label {
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.visit-counter .vc-num {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.3s;
+}
+.visit-counter .vc-num.loading { opacity: 0.35; }
+
+/* count-up animation */
+@keyframes countPop {
+  0%   { transform: translateY(4px); opacity: 0; }
+  60%  { transform: translateY(-2px); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.visit-counter .vc-num.pop { animation: countPop 0.35s ease forwards; }
+
 /* Dark mode toggle */
 .theme-toggle {
   cursor: pointer;
@@ -286,6 +326,29 @@ input[type="text"]::placeholder { color: var(--text-dim); }
 .sample-thumb:hover { border-color: var(--accent); transform: scale(1.04); }
 .sample-thumb.active { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
 .sample-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(100%); }
+
+/* Random image button */
+.random-btn {
+  width: 100%;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 0.4rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+.random-btn:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.random-btn.spinning .dice { display: inline-block; animation: spin 0.5s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Filter selection ── */
 .filter-grid {
@@ -676,6 +739,12 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
   </div>
   <div class="header-right">
     <span class="badge">Pure JS · No OpenCV</span>
+    <!-- Visit counter -->
+    <div class="visit-counter" title="Total page visits">
+      <span class="vc-icon">👁</span>
+      <span class="vc-label">Visits</span>
+      <span class="vc-num loading" id="visitCount">···</span>
+    </div>
     <div class="theme-toggle" id="themeToggle" role="button" aria-label="Toggle theme" title="Toggle dark/light mode">
       <div class="knob">
         <span id="themeIcon">🌙</span>
@@ -711,6 +780,9 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
     <div>
       <div class="section-title">Samples</div>
       <div class="samples-grid" id="samplesGrid"></div>
+      <button class="random-btn" id="randomBtn" onclick="loadRandomPicsumImage()">
+        <span class="dice">🎲</span> Load random image from internet
+      </button>
     </div>
 
     <!-- Filter selection -->
@@ -902,35 +974,103 @@ Object.entries(FILTERS).forEach(([key, f]) => {
 });
 
 /* ═══════════════════════════════════════════════════════════
-   SAMPLE IMAGES  (CC-licensed via GitHub raw)
+   VISIT COUNTER  (counterapi.dev — free, no auth, static-site friendly)
+   Namespace is unique to this project to avoid collisions.
 ═══════════════════════════════════════════════════════════ */
-const SAMPLES = [
-  { name:'Lena',     url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/lena.jpg' },
-  { name:'Building', url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/building.jpg' },
-  { name:'Baboon',   url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/baboon.jpg' },
-  { name:'Fruits',   url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/fruits.jpg' },
-  { name:'Board',    url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/board.jpg' },
-  { name:'Chess',    url:'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/img_with_chessboard.png' },
+(function initVisitCounter() {
+  const API = 'https://api.counterapi.dev/v1/canny-visual-lab-akay/visits/up';
+  const el  = document.getElementById('visitCount');
+
+  fetch(API)
+    .then(r => r.json())
+    .then(data => {
+      const count = data.count ?? data.value ?? '—';
+      el.classList.remove('loading');
+      // Animate count up from current displayed value
+      const target = typeof count === 'number' ? count : 0;
+      let current  = Math.max(0, target - Math.min(target, 80));
+      const step   = () => {
+        current = Math.min(target, current + Math.ceil((target - current) / 6 + 1));
+        el.textContent = current.toLocaleString();
+        if (current < target) requestAnimationFrame(step);
+        else {
+          el.classList.add('pop');
+          setTimeout(() => el.classList.remove('pop'), 400);
+        }
+      };
+      el.textContent = current.toLocaleString();
+      requestAnimationFrame(step);
+    })
+    .catch(() => {
+      el.classList.remove('loading');
+      el.textContent = '—';
+      el.title = 'Counter unavailable';
+    });
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   SAMPLE IMAGES  — Lorem Picsum (picsum.photos)
+   Unlimited free photos with proper CORS headers.
+   Seeds chosen for edge-detection interest (architecture,
+   textures, portraits, nature, geometric, urban).
+═══════════════════════════════════════════════════════════ */
+const PICSUM_SEEDS = [
+  { seed: 1018, label: 'Architecture' },
+  { seed: 338,  label: 'Urban'        },
+  { seed: 29,   label: 'Forest'       },
+  { seed: 64,   label: 'Portrait'     },
+  { seed: 180,  label: 'Abstract'     },
+  { seed: 237,  label: 'Animal'       },
+  { seed: 1060, label: 'Bridge'       },
+  { seed: 219,  label: 'Cityscape'    },
+  { seed: 91,   label: 'Texture'      },
+  { seed: 430,  label: 'Mountain'     },
+  { seed: 106,  label: 'Industrial'   },
+  { seed: 1074, label: 'Interior'     },
 ];
 
+/* Helper: build Picsum URL for a given seed */
+function picsumURL(seed, w = 640, h = 480) {
+  return `https://picsum.photos/seed/${seed}/${w}/${h}`;
+}
+function picsumThumbURL(seed) {
+  return `https://picsum.photos/seed/${seed}/120/90`;
+}
+
 const samplesGrid = document.getElementById('samplesGrid');
-SAMPLES.forEach((s, i) => {
+
+PICSUM_SEEDS.forEach(({ seed, label }) => {
   const div = document.createElement('div');
   div.className = 'sample-thumb';
-  div.title = s.name;
-  div.dataset.url = s.url;
+  div.title = label;
+  div.dataset.seed = seed;
+
   const img = document.createElement('img');
-  img.src = s.url;
-  img.alt = s.name;
+  img.alt = label;
+  // Use small thumbnail for the grid, load full res on click
+  img.src = picsumThumbURL(seed);
   img.onerror = () => { div.style.display = 'none'; };
+
   div.appendChild(img);
   div.addEventListener('click', () => {
     document.querySelectorAll('.sample-thumb').forEach(t => t.classList.remove('active'));
     div.classList.add('active');
-    loadImageFromURL(s.url);
+    // Load full-resolution version
+    loadImageFromURL(picsumURL(seed));
   });
   samplesGrid.appendChild(div);
 });
+
+/* ── Load a completely random Picsum image ── */
+function loadRandomPicsumImage() {
+  const btn  = document.getElementById('randomBtn');
+  btn.classList.add('spinning');
+  // Use a random integer seed so every click gives a different photo
+  const seed = Math.floor(Math.random() * 9000) + 100;
+  const url  = picsumURL(seed);
+  document.querySelectorAll('.sample-thumb').forEach(t => t.classList.remove('active'));
+  loadImageFromURL(url, () => btn.classList.remove('spinning'));
+}
 
 /* ═══════════════════════════════════════════════════════════
    IMAGE LOADING
@@ -950,7 +1090,7 @@ function loadFromURL() {
   loadImageFromURL(url);
 }
 
-function loadImageFromURL(url) {
+function loadImageFromURL(url, onDone) {
   showToast('Loading image…');
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -968,8 +1108,12 @@ function loadImageFromURL(url) {
     loadedImageData = ctx.getImageData(0, 0, w, h);
     showToast(`Image loaded: ${w}×${h}`, 'success');
     document.getElementById('hero').style.opacity = '0.4';
+    if (typeof onDone === 'function') onDone();
   };
-  img.onerror = () => showToast('Failed to load image. Try a direct image URL.', 'error');
+  img.onerror = () => {
+    showToast('Failed to load image. Try a direct image URL.', 'error');
+    if (typeof onDone === 'function') onDone();
+  };
   img.src = url;
 }
 
@@ -1423,13 +1567,14 @@ function showToast(msg, type = '') {
   _toastTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
 }
 
-/* ── Auto-load first sample on start ── */
+/* ── Auto-load a random Picsum image on start ── */
 window.addEventListener('load', () => {
-  const firstSample = document.querySelector('.sample-thumb');
-  if (firstSample) {
-    firstSample.classList.add('active');
-    loadImageFromURL(firstSample.dataset.url);
-  }
+  // Pick a random seed from the featured list for the initial load
+  const pick = PICSUM_SEEDS[Math.floor(Math.random() * PICSUM_SEEDS.length)];
+  // Highlight its thumbnail
+  const thumb = samplesGrid.querySelector(`[data-seed="${pick.seed}"]`);
+  if (thumb) thumb.classList.add('active');
+  loadImageFromURL(picsumURL(pick.seed));
 });
 </script>
 </body>
